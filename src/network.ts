@@ -1,11 +1,11 @@
 import BN from "bignumber.js";
 import _ from "lodash";
 import Web3 from "web3";
-import type { BlockInfo, BlockNumber } from "./contracts";
+import type { BlockInfo, BlockNumber, Contract } from "./contracts";
 import { erc20sData } from "./erc20";
 import { keepTrying } from "./timing";
 import { bn, bn9, eqIgnoreCase, median, zero, zeroAddress } from "./utils";
-
+import type { EventData } from "web3-eth-contract";
 const debug = require("debug")("web3-candies");
 
 /**
@@ -250,3 +250,68 @@ export async function estimateGasPrice(
     };
   });
 }
+
+export async function getPastEvents(
+  contract: Contract,
+  eventName: string,
+  filter: { [key: string]: string | number },
+  startBlock: number,
+  endBlock = Number.MAX_SAFE_INTEGER,
+
+  _web3: Web3 = web3()
+): Promise<EventData[]> {
+  console.log(startBlock);
+  try {
+    return contract.getPastEvents(eventName, { filter, fromBlock: startBlock, toBlock: endBlock });
+  } catch (error) {
+    console.log("getPastEvents", error);
+
+    const distance = endBlock - startBlock;
+    const [r0, r1] = await Promise.all([
+      getPastEvents(contract, eventName, filter, startBlock, Math.floor(startBlock + distance / 2), _web3),
+      getPastEvents(contract, eventName, filter, Math.floor(startBlock + distance / 2) + 1, endBlock, _web3),
+    ]);
+    return r0.concat(r1);
+  }
+}
+
+// interface BlockInfo {
+//   time: number;
+//   number: number;
+// }
+
+// const maxPace = 4000000;
+
+// export async function readEvents(
+//   contract: Contract,
+//   eventName: string,
+//   startBlock: number,
+//   endBlock: number,
+//   pace: number,
+//   filter: { [key: string]: string | number },
+//   web3?: Web3
+// ) {
+//   web3 = web3 || require("./network").web3();
+
+//   try {
+//     const options = { filter, fromBlock: startBlock, toBlock: endBlock };
+//     return await contract.getPastEvents(eventName, options);
+//   } catch (e) {
+//     console.log(e);
+
+//     pace = Math.round(pace * 0.9);
+//     if (pace <= 100) {
+//       throw new Error(`looking for events slowed down below ${pace} - fail`);
+//     }
+//     console.log("\x1b[36m%s\x1b[0m", `read events slowing down to ${pace}`);
+//     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+//     const results: any = [];
+//     for (let i = startBlock; i < endBlock; i += pace) {
+//       const currentEnd = i + pace > endBlock ? endBlock : i + pace;
+//       results.push(...(await readEvents(contract, eventName, i, currentEnd, pace, filter, web3)));
+//       pace = maxPace;
+//     }
+//     console.log("\x1b[36m%s\x1b[0m", `read events slowing down ended`);
+//     return results;
+//   }
+// }
